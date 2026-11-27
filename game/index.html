@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AeroRidge — Ring Run</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1620; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+  .panel { position: absolute; background: rgba(8, 18, 28, 0.62); border: 1px solid rgba(255, 176, 32, 0.35); border-radius: 8px; color: #ffe9b0; padding: 10px 14px; backdrop-filter: blur(2px); }
+  .panel .label { font-size: 10px; letter-spacing: 2px; color: #7de3ff; opacity: 0.85; }
+  .panel .value { font-size: 24px; font-weight: 700; color: #fff3d0; line-height: 1.15; }
+  #hud-left { top: 14px; left: 14px; display: flex; gap: 18px; }
+  #hud-right { top: 14px; right: 14px; text-align: right; min-width: 190px; }
+  #hud-right .bar-row { display: flex; align-items: center; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  #hud-right .bar { width: 110px; height: 10px; background: rgba(255,255,255,0.14); border-radius: 5px; overflow: hidden; }
+  #hud-right .bar > div { height: 100%; background: #37e0a0; border-radius: 5px; }
+  #hud-right .bar > div.low { background: #ff5340; }
+  #hud-throttle-bar { background: #ffb020 !important; }
+  #hud-message { position: absolute; left: 50%; bottom: 92px; transform: translateX(-50%); color: #fff3d0; background: rgba(8, 18, 28, 0.62); border: 1px solid rgba(125, 227, 255, 0.35); border-radius: 8px; padding: 8px 16px; font-size: 15px; white-space: nowrap; }
+  #hud-attitude { position: absolute; left: 14px; bottom: 14px; width: 92px; height: 92px; border-radius: 50%; border: 2px solid rgba(255, 176, 32, 0.5); background: linear-gradient(#2f6fb4 50%, #5a3d24 50%); overflow: hidden; }
+  #hud-attitude-horizon { position: absolute; left: -25%; top: 50%; width: 150%; height: 2px; background: #fff3d0; margin-top: -1px; }
+  #hud-attitude::after { content: ""; position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border: 2px solid #ffb020; border-radius: 50%; }
+  .screen { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff3d0; background: rgba(6, 12, 20, 0.55); text-align: center; padding: 20px; }
+  .screen.hidden { display: none; }
+  .screen h1 { font-size: 52px; margin: 0 0 6px; letter-spacing: 6px; color: #ffb020; text-shadow: 0 2px 18px rgba(255,176,32,0.45); }
+  .screen h2 { font-size: 34px; margin: 0 0 10px; letter-spacing: 4px; color: #ffb020; }
+  .screen p { font-size: 16px; line-height: 1.7; margin: 4px 0; max-width: 620px; }
+  .screen .keys { font-size: 14px; color: #7de3ff; }
+  .screen .big { font-size: 22px; font-weight: 700; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="hud-left" class="panel">
+  <div><div class="label">ALTITUDE</div><div class="value" id="hud-alt">0 ft</div></div>
+  <div><div class="label">SPEED</div><div class="value" id="hud-speed">0 kt</div></div>
+  <div><div class="label">HEADING</div><div class="value" id="hud-heading">000° N</div></div>
+  <div><div class="label">VERT SPEED</div><div class="value" id="hud-vsi">+0 fpm</div></div>
+</div>
+
+<div id="hud-right" class="panel">
+  <div><span class="label">SCORE&nbsp;</span><span class="value" id="hud-score" style="font-size:24px">0</span></div>
+  <div><span class="label" id="hud-rings">RING 1/8</span></div>
+  <div class="bar-row"><span class="label" id="hud-throttle-text">THR 0%</span><div class="bar"><div id="hud-throttle-bar" style="width:0%"></div></div></div>
+  <div class="bar-row"><span class="label" id="hud-fuel-text">FUEL 100%</span><div class="bar"><div id="hud-fuel-bar" style="width:100%"></div></div></div>
+</div>
+
+<div id="hud-attitude"><div id="hud-attitude-horizon"></div></div>
+<div id="hud-message">Full throttle (Shift), pull up (W) at 55 kt to lift off.</div>
+
+<div id="screen-title" class="screen">
+  <h1>AERORIDGE</h1>
+  <p class="big">Ring Run — eight rings, one valley, bring her home.</p>
+  <p>Take off from the strip, thread all eight glowing rings in order, mind your fuel, and land back on the runway to complete the sortie.</p>
+  <p class="keys">W / S or ↑ / ↓ — pitch &nbsp;·&nbsp; A / D or ← / → — roll &nbsp;·&nbsp; Shift / Ctrl or wheel — throttle<br>Drag mouse — look around &nbsp;·&nbsp; C — camera &nbsp;·&nbsp; R — reset &nbsp;·&nbsp; P — pause &nbsp;·&nbsp; M — mute</p>
+  <p class="big">Click or press Enter to fly.</p>
+</div>
+
+<div id="screen-paused" class="screen hidden">
+  <h2>PAUSED</h2>
+  <p>Press P to keep flying.</p>
+</div>
+
+<div id="screen-crashed" class="screen hidden">
+  <h2>CRASHED</h2>
+  <p id="crashed-detail">The valley wins this time.</p>
+  <p class="big">Press R to fly again.</p>
+</div>
+
+<div id="screen-complete" class="screen hidden">
+  <h2>SORTIE COMPLETE</h2>
+  <p class="big">Score: <span id="complete-score">0</span></p>
+  <p id="complete-detail"></p>
+  <p class="big">Press R to fly again.</p>
+</div>
+
+<p id="status" role="status" aria-live="polite"></p>
+<script type="importmap">{"imports": {"three": "./vendor/three.module.min.js"}}</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
